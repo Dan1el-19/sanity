@@ -1,0 +1,1 @@
+Sanity Studio dla projektu MyReflection, zarządzanie treścią + custom tool do zarządzania terminami, grafikiem itd.

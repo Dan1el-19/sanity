@@ -8,5 +8,15 @@ export default defineCliConfig({
   deployment: {
     appId: 'REDACTED',
     autoUpdates: true,
+  },
+  vite: async (viteConfig) => {
+    const {default: tailwindcss} = await import('@tailwindcss/vite')
+    return {
+      ...viteConfig,
+      plugins: [
+        ...(viteConfig.plugins ?? []),
+        tailwindcss()
+      ],
+    }
   }
 })

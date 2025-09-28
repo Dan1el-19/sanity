@@ -19,18 +19,27 @@
     "@sanity/image-url": "^1.2.0",
     "@sanity/svelte-loader": "^1.13.51",
     "@sanity/types": "^4.9.0",
-    "@sanity/vision": "^4.9.0",
+    "@sanity/ui": "^3.1.8",
+    "@sanity/vision": "^4.10.1",
+    "@tailwindcss/vite": "^4.1.13",
+    "appwrite": "^20.1.0",
+    "daisyui": "^5.1.25",
+    "lucide-react": "^0.544.0",
     "react": "^19.1",
     "react-dom": "^19.1",
-    "sanity": "^4.9.0",
-    "styled-components": "^6.1.18"
+    "sanity": "^4.10.1",
+    "sanity-plugin-media": "^4.0.0",
+    "styled-components": "^6.1.18",
+    "tailwindcss": "^4.1.13"
   },
   "devDependencies": {
     "@sanity/eslint-config-studio": "^5.0.2",
+    "@types/node": "^24.5.2",
     "@types/react": "^19.1",
     "eslint": "^9.28",
     "prettier": "^3.5",
-    "typescript": "^5.8"
+    "typescript": "^5.8",
+    "vite": "^7.1.7"
   },
   "prettier": {
     "semi": false,
