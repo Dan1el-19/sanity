@@ -1,7 +1,5 @@
 import '../app.css';
 import React, { useState, useEffect, useMemo } from 'react';
-import { databases } from '../lib/appwrite';
-import { Models } from 'appwrite';
 import {
   CalendarDays,
   Clock,
@@ -15,23 +13,15 @@ import {
   CheckCircle2,
   Hourglass,
   XCircle,
+  Database,
 } from 'lucide-react';
 import { Card, Text, Flex, Stack, Button } from '@sanity/ui';
-
-interface AppointmentData {
-  date: string;
-  time: string;
-  clientEmail: string;
-  status: string;
-  basePrice: number;
-  serviceType: string;
-  firstName: string;
-  lastName: string;
-  userNotes: string;
-  adminNotes: string;
-}
-
-type Appointment = Models.Document & AppointmentData;
+import { 
+  fetchAppointments, 
+  clearCache, 
+  getCacheStats,
+  type Appointment 
+} from '../lib/services/appointmentsCloudFunction';
 
 // Env vars will be read inside the component to allow hot-reload updates in Studio
 
@@ -40,59 +30,110 @@ const AppointmentsTool: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
-
-  const DATABASE_ID = process.env.SANITY_STUDIO_APPWRITE_DATABASE_ID;
-  const COLLECTION_ID = process.env.SANITY_STUDIO_APPWRITE_APPOINTMENTS_COLLECTION_ID;
+  const [cacheInfo, setCacheInfo] = useState<{ size: number; keys: string[] }>({ size: 0, keys: [] });
 
   const filteredAppointments = useMemo(() => {
     if (statusFilter === 'all') return appointments;
-    return appointments.filter((a) => a.status === statusFilter);
+    return appointments.filter((a) => a.service.status === statusFilter);
   }, [appointments, statusFilter]);
 
-  // Pobierz dane z Appwrite
+  // Pobierz dane z Cloud Function (z cache)
   useEffect(() => {
-    const fetchAppointments = async () => {
-      if (!DATABASE_ID || !COLLECTION_ID) {
-        setError('Brak wymaganych zmiennych środowiskowych Appwrite (DATABASE_ID / COLLECTION_ID)');
-        setLoading(false);
-        return;
-      }
+    const fetchData = async () => {
       try {
         setLoading(true);
         setError(null);
-        const response = await databases.listDocuments<Appointment>(DATABASE_ID, COLLECTION_ID);
-        setAppointments(response.documents);
-      } catch (error) {
-        console.error('Błąd pobierania terminów:', error);
-        setError(error instanceof Error ? error.message : 'Wystąpił nieznany błąd');
+        
+        // Wywołaj Cloud Function z cache enabled (domyślnie)
+        const response = await fetchAppointments(
+          statusFilter !== 'all' ? { status: statusFilter } : undefined,
+          true // useCache = true
+        );
+
+        if (!response.success) {
+          setError(response.error || 'Błąd pobierania danych');
+          setAppointments([]);
+          return;
+        }
+
+        setAppointments(response.data.appointments);
+        
+        // Aktualizuj info o cache
+        setCacheInfo(getCacheStats());
+      } catch (err) {
+        console.error('Błąd pobierania terminów:', err);
+        setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd');
+        setAppointments([]);
       } finally {
         setLoading(false);
       }
     };
-    fetchAppointments();
-  }, [DATABASE_ID, COLLECTION_ID]);
+    fetchData();
+  }, [statusFilter]);
 
+  // Odśwież dane (z cache)
+  // Odśwież dane (z cache)
   const reload = () => {
     setLoading(true);
-    setTimeout(() => {
-      // Force re-run of effect by updating a dummy state or just re-fetch inline
-      (async () => {
-        if (!DATABASE_ID || !COLLECTION_ID) {
-          setError('Brak wymaganych zmiennych środowiskowych Appwrite (DATABASE_ID / COLLECTION_ID)');
-          setLoading(false);
+    setTimeout(async () => {
+      try {
+        setError(null);
+        const response = await fetchAppointments(
+          statusFilter !== 'all' ? { status: statusFilter } : undefined,
+          true // useCache = true - użyje cache jeśli jest świeży
+        );
+
+        if (!response.success) {
+          setError(response.error || 'Błąd pobierania danych');
+          setAppointments([]);
           return;
         }
-        try {
-          setError(null);
-          const response = await databases.listDocuments<Appointment>(DATABASE_ID, COLLECTION_ID);
-          setAppointments(response.documents);
-        } catch (e) {
-          setError(e instanceof Error ? e.message : 'Wystąpił nieznany błąd');
-        } finally {
-          setLoading(false);
-        }
-      })();
+
+        setAppointments(response.data.appointments);
+        setCacheInfo(getCacheStats());
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Wystąpił nieznany błąd');
+        setAppointments([]);
+      } finally {
+        setLoading(false);
+      }
     }, 350); // slight delay for UX / skeleton
+  };
+
+  // Wymuś odświeżenie (bypass cache)
+  const forceRefresh = () => {
+    setLoading(true);
+    setTimeout(async () => {
+      try {
+        setError(null);
+        console.log('[Force Refresh] Pomijam cache, pobieram świeże dane');
+        const response = await fetchAppointments(
+          statusFilter !== 'all' ? { status: statusFilter } : undefined,
+          false // useCache = false - wymuś pobieranie z API
+        );
+
+        if (!response.success) {
+          setError(response.error || 'Błąd pobierania danych');
+          setAppointments([]);
+          return;
+        }
+
+        setAppointments(response.data.appointments);
+        setCacheInfo(getCacheStats());
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Wystąpił nieznany błąd');
+        setAppointments([]);
+      } finally {
+        setLoading(false);
+      }
+    }, 350);
+  };
+
+  // Wyczyść cały cache
+  const handleClearCache = () => {
+    clearCache();
+    setCacheInfo(getCacheStats());
+    console.log('[Cache] Cache wyczyszczony');
   };
 
   if (loading) {
@@ -167,9 +208,31 @@ const AppointmentsTool: React.FC = () => {
                 {s === 'cancelled' && 'Anulowane'}
               </button>
             ))}
-            <button onClick={reload} className="btn btn-xs sm:btn-sm btn-ghost" title="Odśwież">
+            <div className="divider divider-horizontal mx-0" />
+            <button 
+              onClick={reload} 
+              className="btn btn-xs sm:btn-sm btn-ghost" 
+              title="Odśwież (z cache)"
+            >
               <RefreshCcw className="w-4 h-4" />
             </button>
+            <button 
+              onClick={forceRefresh} 
+              className="btn btn-xs sm:btn-sm btn-ghost" 
+              title="Wymuś odświeżenie (pomija cache)"
+            >
+              <Database className="w-4 h-4" />
+            </button>
+            {cacheInfo.size > 0 && (
+              <button 
+                onClick={handleClearCache} 
+                className="btn btn-xs sm:btn-sm btn-ghost text-warning" 
+                title={`Wyczyść cache (${cacheInfo.size} wpisów)`}
+              >
+                <XCircle className="w-4 h-4" />
+                <span className="hidden sm:inline ml-1">{cacheInfo.size}</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -189,21 +252,21 @@ const AppointmentsTool: React.FC = () => {
                 pending: { label: 'Oczekujące', icon: <Hourglass className="w-4 h-4" />, classes: 'badge-warning' },
                 cancelled: { label: 'Anulowane', icon: <XCircle className="w-4 h-4" />, classes: 'badge-error' },
               };
-              const st = statusTone[appointment.status] || { label: appointment.status, icon: null, classes: 'badge-ghost' };
+              const st = statusTone[appointment.service.status] || { label: appointment.service.status, icon: null, classes: 'badge-ghost' };
               return (
                 <div
-                  key={appointment.$id}
+                  key={appointment.id}
                   className="card bg-base-200 border border-base-300 hover:border-primary/60 transition-colors shadow-sm hover:shadow-md relative"
                 >
                   <div className="card-body p-5 flex flex-col gap-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <h3 className="card-title text-base-content text-lg leading-tight">
-                          {appointment.firstName} {appointment.lastName}
+                          {appointment.client.fullName}
                         </h3>
                         <div className="mt-1 flex items-center gap-2 text-xs text-base-content/60">
                           <span>ID:</span>
-                          <span className="font-mono truncate max-w-[140px]" title={appointment.$id}>{appointment.$id}</span>
+                          <span className="font-mono truncate max-w-[140px]" title={appointment.id}>{appointment.id}</span>
                         </div>
                       </div>
                       <div className={`badge ${st.classes} gap-1 whitespace-nowrap`}>{st.icon}{st.label}</div>
@@ -212,45 +275,48 @@ const AppointmentsTool: React.FC = () => {
                     <div className="space-y-3 text-sm">
                       <div className="flex items-center gap-2">
                         <CalendarDays className="w-4 h-4 text-primary" />
-                        <span className="font-medium">{appointment.date}</span>
+                        <span className="font-medium">{appointment.schedule.date}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Clock className="w-4 h-4 text-secondary" />
-                        <span>{appointment.time}</span>
+                        <span>{appointment.schedule.time}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Mail className="w-4 h-4 text-accent" />
-                        <span className="truncate" title={appointment.clientEmail}>{appointment.clientEmail}</span>
+                        <span className="truncate" title={appointment.client.email}>{appointment.client.email}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <ShoppingBag className="w-4 h-4 text-info" />
-                        <span>Terapia: {appointment.serviceType}</span>
+                        <span>Terapia: {appointment.service.type}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <CircleDollarSign className="w-4 h-4 text-success" />
-                        <span className="font-semibold">{appointment.basePrice} PLN</span>
+                        <span className="font-semibold">{appointment.pricing.final} PLN</span>
+                        {appointment.pricing.base !== appointment.pricing.final && (
+                          <span className="text-xs line-through opacity-60">{appointment.pricing.base} PLN</span>
+                        )}
                       </div>
                     </div>
 
-                    {(appointment.userNotes || appointment.adminNotes) && (
+                    {(appointment.notes.user || appointment.notes.admin) && (
                       <div className="mt-2 space-y-3">
-                        {appointment.userNotes && (
+                        {appointment.notes.user && (
                           <div>
                             <div className="flex items-center gap-2 mb-1 text-xs font-medium uppercase tracking-wide text-base-content/70">
                               <StickyNote className="w-3.5 h-3.5" /> Notatki klienta
                             </div>
                             <p className="bg-base-200 rounded-md p-2 text-xs leading-relaxed max-h-28 overflow-y-auto">
-                              {appointment.userNotes}
+                              {appointment.notes.user}
                             </p>
                           </div>
                         )}
-                        {appointment.adminNotes && (
+                        {appointment.notes.admin && (
                           <div>
                             <div className="flex items-center gap-2 mb-1 text-xs font-medium uppercase tracking-wide text-base-content/70">
                               <ShieldAlert className="w-3.5 h-3.5" /> Notatki administracyjne
                             </div>
                             <p className="bg-base-200 rounded-md p-2 text-xs leading-relaxed border border-base-300 max-h-28 overflow-y-auto">
-                              {appointment.adminNotes}
+                              {appointment.notes.admin}
                             </p>
                           </div>
                         )}
