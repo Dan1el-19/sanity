@@ -180,10 +180,44 @@ export async function fetchAppointmentsFromCloudFunction(
   useCache: boolean = true,
   cacheTTL: number = DEFAULT_CACHE_TTL
 ): Promise<AppointmentsResponse> {
-  // Generuj klucz cache
-  const cacheKey = getCacheKey(filters);
 
-  // Sprawdź cache jeśli włączony
+  // Zawsze próbujemy pobrać pełne dane (wszystkie wizyty) z cache
+  const allCacheKey = getCacheKey(); // 'all'
+  if (useCache) {
+    const allCachedData = getFromCache(allCacheKey, cacheTTL);
+    if (allCachedData && allCachedData.data && allCachedData.data.appointments.length > 0) {
+      // Jeśli nie ma filtrów, zwracamy całość
+      if (!filters || (!filters.status && !filters.date)) {
+        return allCachedData;
+      }
+      // Filtrowanie lokalne po stronie przeglądarki
+      const filteredAppointments = allCachedData.data.appointments.filter((appt) => {
+        let match = true;
+        if (filters.status) {
+          match = match && appt.service.status === filters.status;
+        }
+        if (filters.date) {
+          match = match && appt.schedule.date === filters.date;
+        }
+        return match;
+      });
+      return {
+        ...allCachedData,
+        data: {
+          ...allCachedData.data,
+          filters: {
+            status: filters.status || null,
+            date: filters.date || null,
+          },
+          count: filteredAppointments.length,
+          appointments: filteredAppointments,
+        },
+      };
+    }
+  }
+
+  // Jeśli nie mamy pełnych danych w cache, wykonujemy GET z backendu (Cloud Function)
+  const cacheKey = getCacheKey(filters);
   if (useCache) {
     const cachedData = getFromCache(cacheKey, cacheTTL);
     if (cachedData) {
