@@ -13,16 +13,20 @@ import {
   CheckCircle2,
   Hourglass,
   XCircle,
-  Database,
 } from 'lucide-react';
 import { Card, Text, Flex, Stack, Button } from '@sanity/ui';
-import { 
-  fetchAppointments, 
-  clearCache, 
-  getCacheStats,
-  type Appointment 
+import {
+  fetchAppointments,
+  type Appointment,
 } from '../lib/services/appointmentsCloudFunction';
 import AuthGuard from '../components/AuthGuard';
+
+const STATUS_FILTERS = [
+  { value: 'all', label: 'Wszystkie' },
+  { value: 'pending', label: 'Oczekujące' },
+  { value: 'confirmed', label: 'Potwierdzone' },
+  { value: 'cancelled', label: 'Anulowane' },
+] as const;
 
 // Env vars will be read inside the component to allow hot-reload updates in Studio
 
@@ -31,8 +35,15 @@ const AppointmentsToolContent: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [cacheInfo, setCacheInfo] = useState<{ size: number; keys: string[] }>({ size: 0, keys: [] });
   const [toolInitialized, setToolInitialized] = useState(false);
+
+  const statusButtonClass = (active: boolean) =>
+    [
+      'btn btn-sm rounded-full border transition-all duration-200 focus-visible:outline-none focus-visible:ring focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-base-100',
+      active
+        ? 'btn-primary border-primary text-primary-content shadow-sm'
+        : 'btn-ghost border-base-300 bg-base-100/80 text-base-content/70 hover:text-base-content hover:border-primary/40 hover:bg-base-100',
+    ].join(' ');
 
   const filteredAppointments = useMemo(() => {
     if (statusFilter === 'all') return appointments;
@@ -71,9 +82,6 @@ const AppointmentsToolContent: React.FC = () => {
         }
 
         setAppointments(response.data.appointments);
-        
-        // Aktualizuj info o cache
-        setCacheInfo(getCacheStats());
       } catch (err) {
         console.error('Błąd pobierania terminów:', err);
         setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd');
@@ -85,8 +93,7 @@ const AppointmentsToolContent: React.FC = () => {
     fetchData();
   }, [statusFilter, toolInitialized]);
 
-  // Odśwież dane (z cache)
-  // Odśwież dane (z cache)
+  // Ręczne odświeżenie danych (pomija cache)
   const reload = () => {
     setLoading(true);
     setTimeout(async () => {
@@ -94,7 +101,7 @@ const AppointmentsToolContent: React.FC = () => {
         setError(null);
         const response = await fetchAppointments(
           statusFilter !== 'all' ? { status: statusFilter } : undefined,
-          true // useCache = true - użyje cache jeśli jest świeży
+          false // useCache = false - wymuś pobieranie z API przy manualnym odświeżeniu
         );
 
         if (!response.success) {
@@ -104,7 +111,6 @@ const AppointmentsToolContent: React.FC = () => {
         }
 
         setAppointments(response.data.appointments);
-        setCacheInfo(getCacheStats());
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Wystąpił nieznany błąd');
         setAppointments([]);
@@ -112,42 +118,6 @@ const AppointmentsToolContent: React.FC = () => {
         setLoading(false);
       }
     }, 350); // slight delay for UX / skeleton
-  };
-
-  // Wymuś odświeżenie (bypass cache)
-  const forceRefresh = () => {
-    setLoading(true);
-    setTimeout(async () => {
-      try {
-        setError(null);
-        console.log('[Force Refresh] Pomijam cache, pobieram świeże dane');
-        const response = await fetchAppointments(
-          statusFilter !== 'all' ? { status: statusFilter } : undefined,
-          false // useCache = false - wymuś pobieranie z API
-        );
-
-        if (!response.success) {
-          setError(response.error || 'Błąd pobierania danych');
-          setAppointments([]);
-          return;
-        }
-
-        setAppointments(response.data.appointments);
-        setCacheInfo(getCacheStats());
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Wystąpił nieznany błąd');
-        setAppointments([]);
-      } finally {
-        setLoading(false);
-      }
-    }, 350);
-  };
-
-  // Wyczyść cały cache
-  const handleClearCache = () => {
-    clearCache();
-    setCacheInfo(getCacheStats());
-    console.log('[Cache] Cache wyczyszczony');
   };
 
   // Don't render anything until tool is properly initialized
@@ -217,52 +187,42 @@ const AppointmentsToolContent: React.FC = () => {
   return (
     <div className="p-4 sm:p-6 bg-base-100 min-h-screen">
       <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between mb-6">
-          <div>
+        <div className="flex flex-col gap-5 mb-6">
+          <div className="flex items-center justify-between gap-3">
             <h2 className="text-2xl font-semibold flex items-center gap-2 text-base-content">
-              <CalendarDays className="w-7 h-7" /> Rezerwacje
+              <CalendarDays className="w-7 h-7 -translate-y-[2px]" /> Rezerwacje
             </h2>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {['all', 'pending', 'confirmed', 'cancelled'].map((s) => (
-              <button
-                key={s}
-                onClick={() => setStatusFilter(s)}
-                className={`btn btn-xs sm:btn-sm capitalize ${
-                  statusFilter === s ? 'btn-primary' : 'btn-outline'
-                }`}
-              >
-                {s === 'all' && 'Wszystkie'}
-                {s === 'pending' && 'Oczekujące'}
-                {s === 'confirmed' && 'Potwierdzone'}
-                {s === 'cancelled' && 'Anulowane'}
-              </button>
-            ))}
-            <div className="divider divider-horizontal mx-0" />
-            <button 
-              onClick={reload} 
-              className="btn btn-xs sm:btn-sm btn-ghost" 
-              title="Odśwież (z cache)"
+            <button
+              type="button"
+              onClick={reload}
+              className="btn btn-sm gap-2 rounded-full border border-base-300 bg-base-100/90 text-base-content/80 hover:text-base-content hover:border-primary/40 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-base-100"
+              title="Pobierz najnowsze dane"
             >
               <RefreshCcw className="w-4 h-4" />
+              <span>Odśwież</span>
             </button>
-            <button 
-              onClick={forceRefresh} 
-              className="btn btn-xs sm:btn-sm btn-ghost" 
-              title="Wymuś odświeżenie (pomija cache)"
+          </div>
+          <div className="flex flex-col gap-2">
+            <span className="text-xs font-medium uppercase tracking-wide text-base-content/60">
+              Status wizyty
+            </span>
+            <div
+              className="grid grid-cols-2 gap-2 sm:grid-cols-4"
+              role="group"
+              aria-label="Filtruj wizyty według statusu"
             >
-              <Database className="w-4 h-4" />
-            </button>
-            {cacheInfo.size > 0 && (
-              <button 
-                onClick={handleClearCache} 
-                className="btn btn-xs sm:btn-sm btn-ghost text-warning" 
-                title={`Wyczyść cache (${cacheInfo.size} wpisów)`}
-              >
-                <XCircle className="w-4 h-4" />
-                <span className="hidden sm:inline ml-1">{cacheInfo.size}</span>
-              </button>
-            )}
+              {STATUS_FILTERS.map(({ value, label }) => (
+                <button
+                  type="button"
+                  key={value}
+                  onClick={() => setStatusFilter(value)}
+                  aria-pressed={statusFilter === value}
+                  className={`${statusButtonClass(statusFilter === value)} capitalize w-full`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
