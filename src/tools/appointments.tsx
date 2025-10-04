@@ -22,23 +22,37 @@ import {
   getCacheStats,
   type Appointment 
 } from '../lib/services/appointmentsCloudFunction';
+import AuthGuard from '../components/AuthGuard';
 
 // Env vars will be read inside the component to allow hot-reload updates in Studio
 
-const AppointmentsTool: React.FC = () => {
+const AppointmentsToolContent: React.FC = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [cacheInfo, setCacheInfo] = useState<{ size: number; keys: string[] }>({ size: 0, keys: [] });
+  const [toolInitialized, setToolInitialized] = useState(false);
 
   const filteredAppointments = useMemo(() => {
     if (statusFilter === 'all') return appointments;
     return appointments.filter((a) => a.service.status === statusFilter);
   }, [appointments, statusFilter]);
 
+  // Initialize tool only after component is mounted
+  useEffect(() => {
+    console.log('[AppointmentsTool] Component mounted, initializing...');
+    setToolInitialized(true);
+  }, []);
+
   // Pobierz dane z Cloud Function (z cache)
   useEffect(() => {
+    // Don't fetch data until tool is properly initialized
+    if (!toolInitialized) {
+      console.log('[AppointmentsTool] Tool not yet initialized, skipping data fetch');
+      return;
+    }
+
     const fetchData = async () => {
       try {
         setLoading(true);
@@ -69,7 +83,7 @@ const AppointmentsTool: React.FC = () => {
       }
     };
     fetchData();
-  }, [statusFilter]);
+  }, [statusFilter, toolInitialized]);
 
   // Odśwież dane (z cache)
   // Odśwież dane (z cache)
@@ -135,6 +149,22 @@ const AppointmentsTool: React.FC = () => {
     setCacheInfo(getCacheStats());
     console.log('[Cache] Cache wyczyszczony');
   };
+
+  // Don't render anything until tool is properly initialized
+  if (!toolInitialized) {
+    return (
+      <div className="p-6 bg-base-100 min-h-screen">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-center min-h-[200px]">
+            <div className="text-center">
+              <div className="loading loading-spinner loading-lg mb-4"></div>
+              <p className="text-base-content/70">Initializing tool...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -336,6 +366,15 @@ const AppointmentsTool: React.FC = () => {
         )}
       </div>
     </div>
+  );
+};
+
+// Main component with Auth Guard - no auth status bar, just protection
+const AppointmentsTool: React.FC = () => {
+  return (
+    <AuthGuard toolName="Appointments" requireAuth={true} showAuthStatus={false}>
+      <AppointmentsToolContent />
+    </AuthGuard>
   );
 };
 

@@ -9,7 +9,8 @@
     "start": "sanity start",
     "build": "sanity build",
     "deploy": "sanity deploy",
-    "deploy-graphql": "sanity graphql deploy"
+    "deploy-graphql": "sanity graphql deploy",
+    "back": "node scripts/back.js"
   },
   "keywords": [
     "sanity"
@@ -18,28 +19,30 @@
     "@sanity/client": "^7.11.2",
     "@sanity/image-url": "^1.2.0",
     "@sanity/svelte-loader": "^1.13.51",
-    "@sanity/types": "^4.9.0",
+    "@sanity/types": "^4.10.2",
     "@sanity/ui": "^3.1.8",
-    "@sanity/vision": "^4.10.1",
-    "@tailwindcss/vite": "^4.1.13",
+    "@sanity/vision": "^4.10.2",
+    "@tailwindcss/vite": "^4.1.14",
     "appwrite": "^20.1.0",
-    "daisyui": "^5.1.25",
+    "daisyui": "^5.1.26",
+    "date-fns": "^4.1.0",
     "lucide-react": "^0.544.0",
-    "react": "^19.1",
-    "react-dom": "^19.1",
-    "sanity": "^4.10.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-icons": "^5.5.0",
+    "sanity": "^4.10.2",
     "sanity-plugin-media": "^4.0.0",
-    "styled-components": "^6.1.18",
-    "tailwindcss": "^4.1.13"
+    "styled-components": "^6.1.19",
+    "tailwindcss": "^4.1.14"
   },
   "devDependencies": {
     "@sanity/eslint-config-studio": "^5.0.2",
-    "@types/node": "^24.5.2",
-    "@types/react": "^19.1",
-    "eslint": "^9.28",
-    "prettier": "^3.5",
-    "typescript": "^5.8",
-    "vite": "^7.1.7"
+    "@types/node": "^24.6.2",
+    "@types/react": "^19.2.0",
+    "eslint": "^9.36.0",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.8"
   },
   "prettier": {
     "semi": false,
