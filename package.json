@@ -10,7 +10,8 @@
     "build": "sanity build",
     "deploy": "sanity deploy",
     "deploy-graphql": "sanity graphql deploy",
-    "back": "node scripts/back.js"
+    "back": "node scripts/back.js",
+    "hist": "node scripts/hist.js"
   },
   "keywords": [
     "sanity"
