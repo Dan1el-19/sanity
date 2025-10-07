@@ -1,5 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Space+Grotesk:wght@300..700&display=swap');
 @import 'tailwindcss';
+@source "./**/*.{ts,tsx,js,jsx}";
 @plugin "daisyui" {
   themes: noridc;
 };
@@ -22,7 +23,7 @@
   --color-neutral-content: oklch(89.925% 0.016 262.749);
   --color-info: oklch(69.207% 0.062 332.664);
   --color-info-content: oklch(13.841% 0.012 332.664);
-  --color-success: oklch(76.827% 0.074 131.063);
+  --color-success: oklch(0.8003 0.1821 151.71);
   --color-success-content: oklch(15.365% 0.014 131.063);
   --color-warning: oklch(85.486% 0.089 84.093);
   --color-warning-content: oklch(17.097% 0.017 84.093);
@@ -41,4 +42,28 @@
 @theme {
   --font-sans: 'Inter', 'sans-serif';
   --font-display: 'Space Grotesk', 'sans-serif';
+  --color-tuned-blue: #60A5FA;
+  --color-tuned-blue-content: #0f172a;
 };
+
+@layer components {
+  .btn-tuned-blue {
+    --btn-color: var(--color-tuned-blue);
+    --btn-fg: var(--color-tuned-blue-content);
+  }
+}
+
+.fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

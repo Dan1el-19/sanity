@@ -1,24 +1,23 @@
 import '../app.css';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   CalendarDays,
-  Clock,
-  Mail,
-  ShoppingBag,
-  CircleDollarSign,
-  StickyNote,
-  ShieldAlert,
   RefreshCcw,
-  UsersRound,
   CheckCircle2,
   Hourglass,
   XCircle,
+  ArrowLeft,
 } from 'lucide-react';
-import { Card, Text, Flex, Stack, Button } from '@sanity/ui';
+// Usunięto nieużywane importy z @sanity/ui
 import {
   fetchAppointments,
   type Appointment,
 } from '../lib/services/appointmentsCloudFunction';
+import List from '../components/appointments/List';
+import Detail from '../components/appointments/Detail';
+import StatusFilter from '../components/appointments/StatusFilter';
+import LoadingSkeleton from '../components/appointments/LoadingSkeleton';
+import ErrorPanel from '../components/appointments/ErrorPanel';
 import AuthGuard from '../components/AuthGuard';
 
 const STATUS_FILTERS = [
@@ -28,6 +27,71 @@ const STATUS_FILTERS = [
   { value: 'cancelled', label: 'Anulowane' },
 ] as const;
 
+const formatPolishDate = (rawDate: string) => {
+  const date = new Date(rawDate);
+  if (Number.isNaN(date.getTime())) return rawDate;
+
+  const day = date.getDate().toString().padStart(2, '0');
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const year = date.getFullYear();
+
+  return `${day}-${month}-${year}`;
+};
+
+const QUERY_PARAM_KEY = 'appointmentId';
+
+const getAppointmentIdFromLocation = () => {
+  if (typeof window === 'undefined') return null;
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get(QUERY_PARAM_KEY);
+  return id && id.trim().length > 0 ? id : null;
+};
+
+const updateUrlWithAppointmentId = (id: string | null) => {
+  if (typeof window === 'undefined') return;
+  const url = new URL(window.location.href);
+  if (id) {
+    url.searchParams.set(QUERY_PARAM_KEY, id);
+  } else {
+    url.searchParams.delete(QUERY_PARAM_KEY);
+  }
+  window.history.pushState({}, '', url.toString());
+};
+
+const ACTION_GROUPS = [
+  {
+    key: 'primary',
+    title: 'Zarządzanie',
+    containerClass: 'border-secondary/25 bg-secondary/10',
+    labelClass: 'text-secondary font-semibold',
+    buttons: [
+      { key: 'confirm', label: 'Potwierdź', className: 'btn btn-sm w-full justify-center btn-success text-success-content font-semibold' },
+      { key: 'cancel', label: 'Anuluj', className: 'btn btn-sm w-full justify-center btn-error text-error-content font-semibold' },
+      { key: 'reschedule', label: 'Przełóż', className: 'btn btn-sm w-full justify-center btn-tuned-blue text-warning-content font-semibold' },
+    ],
+  },
+  {
+    key: 'secondary',
+    title: 'Administracyjne',
+    containerClass: 'border-neutral-500/40 bg-neutral-500/10',
+    labelClass: 'text-secondary font-semibold',
+    buttons: [
+      { key: 'payment', label: 'Płatność', className: 'btn btn-sm w-full justify-center btn-accent text-accent-content font-semibold' },
+      { key: 'notes', label: 'Dodaj notatki', className: 'btn btn-sm w-full justify-center btn-neutral text-neutral-content font-semibold' },
+    ],
+  },
+  {
+    key: 'destructive',
+    title: 'Historia i archiwizacja',
+    containerClass: 'border-neutral-500/40 bg-neutral-500/10',
+    labelClass: 'text-neutral-400 font-semibold',
+    buttons: [
+      { key: 'history', label: 'Historia zmian', className: 'btn btn-sm w-full justify-center btn-outline btn-neutral font-semibold' },
+      { key: 'archive', label: 'Archiwizuj', className: 'btn btn-sm w-full justify-center btn-neutral text-neutral-content font-semibold' },
+    ],
+  },
+];
+
 // Env vars will be read inside the component to allow hot-reload updates in Studio
 
 const AppointmentsToolContent: React.FC = () => {
@@ -36,6 +100,22 @@ const AppointmentsToolContent: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [toolInitialized, setToolInitialized] = useState(false);
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(() => getAppointmentIdFromLocation());
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handlePopState = () => {
+      setSelectedAppointmentId(getAppointmentIdFromLocation());
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  useEffect(() => {
+    if (!toolInitialized) return;
+    setSelectedAppointmentId(getAppointmentIdFromLocation());
+  }, [toolInitialized]);
 
   const statusButtonClass = (active: boolean) =>
     [
@@ -49,6 +129,47 @@ const AppointmentsToolContent: React.FC = () => {
     if (statusFilter === 'all') return appointments;
     return appointments.filter((a) => a.service.status === statusFilter);
   }, [appointments, statusFilter]);
+
+  const selectedAppointment = useMemo(() => {
+    if (!selectedAppointmentId) return null;
+    return appointments.find((appointment) => appointment.id === selectedAppointmentId) || null;
+  }, [appointments, selectedAppointmentId]);
+
+  const handleSelectAppointment = useCallback((appointmentId: string) => {
+    updateUrlWithAppointmentId(appointmentId);
+    setSelectedAppointmentId(appointmentId);
+  }, []);
+
+  const handleCloseDetail = useCallback(() => {
+    updateUrlWithAppointmentId(null);
+    setSelectedAppointmentId(null);
+  }, []);
+
+  const resolveStatusTone = useCallback((status: string) => {
+    const toneMap: Record<string, { label: string; icon: React.ReactNode; classes: string }> = {
+      confirmed: { label: 'Potwierdzone', icon: <CheckCircle2 className="w-4 h-4" />, classes: 'badge-success' },
+      pending: { label: 'Oczekujące', icon: <Hourglass className="w-4 h-4" />, classes: 'badge-warning' },
+      cancelled: { label: 'Anulowane', icon: <XCircle className="w-4 h-4" />, classes: 'badge-error' },
+    };
+
+    return toneMap[status] || { label: status, icon: null, classes: 'badge-ghost' };
+  }, []);
+
+  const isDetailOpen = Boolean(selectedAppointmentId);
+
+  // ...usunięto lokalną logikę listContent...
+
+  // ...usunięto lokalną logikę detailPanel...
+  const detailPanel = (
+    <Detail
+      appointment={selectedAppointment}
+      isDetailOpen={isDetailOpen}
+      onClose={handleCloseDetail}
+      formatPolishDate={formatPolishDate}
+      resolveStatusTone={resolveStatusTone}
+      actionGroups={ACTION_GROUPS}
+    />
+  );
 
   // Initialize tool only after component is mounted
   useEffect(() => {
@@ -120,6 +241,73 @@ const AppointmentsToolContent: React.FC = () => {
     }, 350); // slight delay for UX / skeleton
   };
 
+  const listView = (
+    <div className="fade-in space-y-6">
+      <div className="flex flex-col gap-5">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-2xl font-semibold flex items-center gap-2 text-base-content">
+            <CalendarDays className="w-7 h-7 -translate-y-[2px]" /> Rezerwacje
+          </h2>
+          <button
+            type="button"
+            onClick={reload}
+            className="btn btn-sm gap-2 rounded-full border border-base-300 bg-base-100/90 text-base-content/80 hover:text-base-content hover:border-primary/40 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-base-100"
+            title="Pobierz najnowsze dane"
+          >
+            <RefreshCcw className="w-4 h-4" />
+            <span>Odśwież</span>
+          </button>
+        </div>
+        <div className="flex flex-col gap-2">
+          <span className="text-xs font-medium uppercase tracking-wide text-base-content/60">
+            Status wizyty
+          </span>
+          <StatusFilter
+            filters={[...STATUS_FILTERS]}
+            active={statusFilter}
+            onChange={setStatusFilter}
+            buttonClass={statusButtonClass}
+          />
+        </div>
+      </div>
+      <List
+        appointments={filteredAppointments}
+        statusFilter={statusFilter}
+        selectedAppointmentId={selectedAppointmentId}
+        onSelectAppointment={handleSelectAppointment}
+        resolveStatusTone={resolveStatusTone}
+        formatPolishDate={formatPolishDate}
+      />
+    </div>
+  );
+
+  const detailView = (
+    <div className="fade-in space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleCloseDetail}
+            className="btn btn-ghost btn-sm gap-2"
+          >
+            <ArrowLeft className="w-6 h-6" />
+          </button>
+          <h2 className="text-xl sm:text-2xl font-semibold text-base-content">Szczegóły wizyty</h2>
+        </div>
+        <button
+          type="button"
+          onClick={reload}
+          className="btn btn-sm gap-2 rounded-full border border-base-300 bg-base-100/90 text-base-content/80 hover:text-base-content hover:border-primary/40 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-base-100"
+          title="Pobierz najnowsze dane"
+        >
+          <RefreshCcw className="w-4 h-4" />
+          <span>Odśwież</span>
+        </button>
+      </div>
+      {detailPanel}
+    </div>
+  );
+
   // Don't render anything until tool is properly initialized
   if (!toolInitialized) {
     return (
@@ -137,193 +325,17 @@ const AppointmentsToolContent: React.FC = () => {
   }
 
   if (loading) {
-    return (
-      <div className="p-6 bg-base-100 min-h-screen">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-semibold flex items-center gap-2 text-base-content">
-              <CalendarDays className="w-6 h-6" /> Terminy
-            </h2>
-          </div>
-          <div className="grid gap-5 sm:grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="card bg-base-200 shadow-sm animate-pulse border border-base-300">
-                <div className="card-body space-y-4">
-                  <div className="h-5 w-1/2 bg-base-300 rounded" />
-                  <div className="space-y-2">
-                    <div className="h-3 w-3/4 bg-base-300 rounded" />
-                    <div className="h-3 w-2/3 bg-base-300 rounded" />
-                    <div className="h-3 w-1/2 bg-base-300 rounded" />
-                  </div>
-                  <div className="h-10 w-full bg-base-300 rounded" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
+    return <LoadingSkeleton />;
   }
 
   if (error) {
-    return (
-      <div className="p-6 bg-base-200 min-h-screen">
-        <div className="max-w-xl mx-auto">
-          <Card padding={5} radius={3} tone="critical" shadow={1}>
-            <Stack space={4}>
-              <Flex align="center" gap={3}>
-                <ShieldAlert className="w-6 h-6 text-error" />
-                <Text size={3} weight="semibold">Błąd ładowania terminów</Text>
-              </Flex>
-              <Text size={2}>{error}</Text>
-              <Button mode="ghost" tone="critical" onClick={reload} icon={RefreshCcw as any} text="Spróbuj ponownie" />
-            </Stack>
-          </Card>
-        </div>
-      </div>
-    );
+    return <ErrorPanel error={error} onReload={reload} />;
   }
 
   return (
     <div className="p-4 sm:p-6 bg-base-100 min-h-screen">
       <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col gap-5 mb-6">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-2xl font-semibold flex items-center gap-2 text-base-content">
-              <CalendarDays className="w-7 h-7 -translate-y-[2px]" /> Rezerwacje
-            </h2>
-            <button
-              type="button"
-              onClick={reload}
-              className="btn btn-sm gap-2 rounded-full border border-base-300 bg-base-100/90 text-base-content/80 hover:text-base-content hover:border-primary/40 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-base-100"
-              title="Pobierz najnowsze dane"
-            >
-              <RefreshCcw className="w-4 h-4" />
-              <span>Odśwież</span>
-            </button>
-          </div>
-          <div className="flex flex-col gap-2">
-            <span className="text-xs font-medium uppercase tracking-wide text-base-content/60">
-              Status wizyty
-            </span>
-            <div
-              className="grid grid-cols-2 gap-2 sm:grid-cols-4"
-              role="group"
-              aria-label="Filtruj wizyty według statusu"
-            >
-              {STATUS_FILTERS.map(({ value, label }) => (
-                <button
-                  type="button"
-                  key={value}
-                  onClick={() => setStatusFilter(value)}
-                  aria-pressed={statusFilter === value}
-                  className={`${statusButtonClass(statusFilter === value)} capitalize w-full`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {filteredAppointments.length === 0 ? (
-            <div className="mt-16 flex flex-col items-center gap-4 text-base-content/70">
-              <UsersRound className="w-12 h-12" />
-              <p className="text-lg font-medium">Brak terminów do wyświetlenia</p>
-              {statusFilter !== 'all' && (
-                <p className="text-sm">Zmień filtr aby zobaczyć inne wyniki.</p>
-              )}
-            </div>
-        ) : (
-          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-            {filteredAppointments.map((appointment) => {
-              const statusTone: Record<string, { label: string; icon: React.ReactNode; classes: string }> = {
-                confirmed: { label: 'Potwierdzone', icon: <CheckCircle2 className="w-4 h-4" />, classes: 'badge-success' },
-                pending: { label: 'Oczekujące', icon: <Hourglass className="w-4 h-4" />, classes: 'badge-warning' },
-                cancelled: { label: 'Anulowane', icon: <XCircle className="w-4 h-4" />, classes: 'badge-error' },
-              };
-              const st = statusTone[appointment.service.status] || { label: appointment.service.status, icon: null, classes: 'badge-ghost' };
-              return (
-                <div
-                  key={appointment.id}
-                  className="card bg-base-200 border border-base-300 hover:border-primary/60 transition-colors shadow-sm hover:shadow-md relative"
-                >
-                  <div className="card-body p-5 flex flex-col gap-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <h3 className="card-title text-base-content text-lg leading-tight">
-                          {appointment.client.fullName}
-                        </h3>
-                        <div className="mt-1 flex items-center gap-2 text-xs text-base-content/60">
-                          <span>ID:</span>
-                          <span className="font-mono truncate max-w-[140px]" title={appointment.id}>{appointment.id}</span>
-                        </div>
-                      </div>
-                      <div className={`badge ${st.classes} gap-1 whitespace-nowrap`}>{st.icon}{st.label}</div>
-                    </div>
-
-                    <div className="space-y-3 text-sm">
-                      <div className="flex items-center gap-2">
-                        <CalendarDays className="w-4 h-4 text-primary" />
-                        <span className="font-medium">{appointment.schedule.date}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-secondary" />
-                        <span>{appointment.schedule.time}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Mail className="w-4 h-4 text-accent" />
-                        <span className="truncate" title={appointment.client.email}>{appointment.client.email}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <ShoppingBag className="w-4 h-4 text-info" />
-                        <span>Terapia: {appointment.service.type}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <CircleDollarSign className="w-4 h-4 text-success" />
-                        <span className="font-semibold">{appointment.pricing.final} PLN</span>
-                        {appointment.pricing.base !== appointment.pricing.final && (
-                          <span className="text-xs line-through opacity-60">{appointment.pricing.base} PLN</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {(appointment.notes.user || appointment.notes.admin) && (
-                      <div className="mt-2 space-y-3">
-                        {appointment.notes.user && (
-                          <div>
-                            <div className="flex items-center gap-2 mb-1 text-xs font-medium uppercase tracking-wide text-base-content/70">
-                              <StickyNote className="w-3.5 h-3.5" /> Notatki klienta
-                            </div>
-                            <p className="bg-base-200 rounded-md p-2 text-xs leading-relaxed max-h-28 overflow-y-auto">
-                              {appointment.notes.user}
-                            </p>
-                          </div>
-                        )}
-                        {appointment.notes.admin && (
-                          <div>
-                            <div className="flex items-center gap-2 mb-1 text-xs font-medium uppercase tracking-wide text-base-content/70">
-                              <ShieldAlert className="w-3.5 h-3.5" /> Notatki administracyjne
-                            </div>
-                            <p className="bg-base-200 rounded-md p-2 text-xs leading-relaxed border border-base-300 max-h-28 overflow-y-auto">
-                              {appointment.notes.admin}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="card-actions justify-end mt-auto">
-                      <button onClick={reload} className="btn btn-ghost btn-xs gap-1">
-                        <RefreshCcw className="w-3.5 h-3.5" /> Odśwież
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        {isDetailOpen ? detailView : listView}
       </div>
     </div>
   );
