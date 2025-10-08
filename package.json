@@ -18,6 +18,7 @@
   ],
   "dependencies": {
     "@sanity/client": "^7.11.2",
+    "@sanity/icons": "^3.7.4",
     "@sanity/image-url": "^1.2.0",
     "@sanity/svelte-loader": "^1.13.51",
     "@sanity/types": "^4.10.2",
