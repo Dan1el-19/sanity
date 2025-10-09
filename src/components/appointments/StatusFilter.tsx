@@ -1,5 +1,9 @@
 import React from 'react';
 
+/**
+ * StatusFilter renders a group of buttons to filter appointments by status.
+ * It exposes a simple onChange callback and keeps markup accessible via role/group.
+ */
 export type StatusFilterProps = {
   filters: Array<{ value: string; label: string }>;
   active: string;

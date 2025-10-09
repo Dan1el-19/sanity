@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Edit, Trash2, Calendar, Clock, Tag } from 'lucide-react';
-import LoadingSkeleton from './LoadingSkeleton';
-import ErrorPanel from './ErrorPanel';
+import { Plus, Edit, Trash2, Calendar, Clock, Tag, RefreshCcw } from 'lucide-react';
+import LoadingSkeleton from '../LoadingSkeleton';
+import ErrorPanel from '../ErrorPanel';
 import {
   fetchSchedulePresets,
   deleteSchedulePreset,
@@ -11,6 +11,10 @@ import {
   WEEKDAYS,
 } from '../../lib/services/schedulesService';
 
+/**
+ * Schedules list view - responsible for loading schedule presets and
+ * rendering them in a card grid. Provides edit/create hooks to the parent.
+ */
 export type ListProps = {
   onCreateNew: () => void;
   onEdit: (preset: SchedulePreset) => void;
@@ -21,11 +25,11 @@ const List: React.FC<ListProps> = ({ onCreateNew, onEdit }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadPresets = async () => {
+  const loadPresets = async (useCache: boolean = true) => {
     try {
       setLoading(true);
       setError(null);
-      const data = await fetchSchedulePresets();
+      const data = await fetchSchedulePresets(useCache);
       setPresets(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Nieznany błąd');
@@ -35,23 +39,29 @@ const List: React.FC<ListProps> = ({ onCreateNew, onEdit }) => {
   };
 
   useEffect(() => {
-    loadPresets();
+    // Load without cache on mount (refreshKey ensures fresh mount after save)
+    loadPresets(false);
   }, []);
+
+  const handleRefresh = () => {
+    // Force refresh without cache
+    loadPresets(false);
+  };
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('Czy na pewno chcesz usunąć ten grafik?')) return;
 
     try {
       await deleteSchedulePreset(id);
-      await loadPresets();
+      await loadPresets(false); // Reload without cache after delete
     } catch (err) {
       alert('Błąd podczas usuwania grafiku');
       console.error(err);
     }
   };
 
-  if (loading) return <LoadingSkeleton />;
-  if (error) return <ErrorPanel error={error} onReload={loadPresets} />;
+  if (loading) return <LoadingSkeleton variant="list" itemCount={3} />;
+  if (error) return <ErrorPanel error={error} onReload={handleRefresh} title="Błąd ładowania grafików" />;
 
   return (
     <div className="space-y-6">
@@ -59,16 +69,26 @@ const List: React.FC<ListProps> = ({ onCreateNew, onEdit }) => {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-3xl font-bold text-base-content">Grafiki pracy</h1>
-          <p className="text-base-content/60 mt-1">Zarządzaj szablonami grafików dla różnych miesięcy</p>
         </div>
-        <button
-          type="button"
-          onClick={onCreateNew}
-          className="btn btn-primary gap-2"
-        >
-          <Plus className="w-5 h-5" />
-          Nowy grafik
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={handleRefresh}
+            className="btn btn-ghost gap-2 border border-base-300 bg-base-100/90 text-base-content/80 hover:text-base-content hover:border-primary/40 hover:bg-base-100"
+            title="Pobierz najnowsze dane"
+          >
+            <RefreshCcw className="w-5 h-5" />
+            Odśwież
+          </button>
+          <button
+            type="button"
+            onClick={onCreateNew}
+            className="btn btn-primary gap-2"
+          >
+            <Plus className="w-5 h-5" />
+            Nowy grafik
+          </button>
+        </div>
       </div>
 
       {/* List */}
@@ -76,7 +96,6 @@ const List: React.FC<ListProps> = ({ onCreateNew, onEdit }) => {
         <div className="text-center py-14 sm:py-20">
           <Calendar className="w-14 h-14 sm:w-16 sm:h-16 mx-auto text-base-content/30 mb-4" />
           <h3 className="text-xl font-semibold text-base-content mb-2">Brak grafików</h3>
-          <p className="text-base-content/60 mb-6">Rozpocznij od utworzenia pierwszego szablonu grafiku</p>
           <button
             type="button"
             onClick={onCreateNew}
@@ -94,7 +113,7 @@ const List: React.FC<ListProps> = ({ onCreateNew, onEdit }) => {
             return (
               <div
                 key={preset.$id}
-                className="card bg-base-100 shadow-md hover:shadow-xl transition-shadow border border-base-300"
+                className="card bg-base-200 shadow-md hover:shadow-xl transition-shadow border border-base-300"
               >
                 <div className="card-body">
                   {/* Title Section */}
@@ -132,7 +151,7 @@ const List: React.FC<ListProps> = ({ onCreateNew, onEdit }) => {
                   </div>
 
                   {/* Stats */}
-                  <div className="space-y-2 mb-4">
+                  <div className="space-y-2 mb-4 p-3 rounded-lg border border-base-100 bg-base-100/50">
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-base-content/70">Łącznie slotów:</span>
                       <span className="font-semibold text-primary text-lg">{totalSlots}</span>

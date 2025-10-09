@@ -6,6 +6,10 @@ export type TimeSlotSelectorProps = {
   onToggle: () => void;
 };
 
+/**
+ * Individual time slot button used by the WeekScheduleEditor grid.
+ * Handles selection state and keyboard/mouse interaction.
+ */
 const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({ time, isSelected, onToggle }) => (
   <button
     type="button"

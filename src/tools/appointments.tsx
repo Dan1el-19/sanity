@@ -1,14 +1,12 @@
 import '../app.css';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  CalendarDays,
   RefreshCcw,
   CheckCircle2,
   Hourglass,
   XCircle,
   ArrowLeft,
 } from 'lucide-react';
-// Usunięto nieużywane importy z @sanity/ui
 import {
   fetchAppointments,
   type Appointment,
@@ -16,10 +14,12 @@ import {
 import List from '../components/appointments/List';
 import Detail from '../components/appointments/Detail';
 import StatusFilter from '../components/appointments/StatusFilter';
-import LoadingSkeleton from '../components/appointments/LoadingSkeleton';
-import ErrorPanel from '../components/appointments/ErrorPanel';
+import LoadingSkeleton from '../components/LoadingSkeleton';
+import ErrorPanel from '../components/ErrorPanel';
 import AuthGuard from '../components/AuthGuard';
 
+// Available status filters shown in the UI.
+// Labels remain localized in Polish intentionally; these are UI strings, not developer comments.
 const STATUS_FILTERS = [
   { value: 'all', label: 'Wszystkie' },
   { value: 'pending', label: 'Oczekujące' },
@@ -27,6 +27,10 @@ const STATUS_FILTERS = [
   { value: 'cancelled', label: 'Anulowane' },
 ] as const;
 
+/**
+ * Format an ISO-ish date string into a simple dd-MM-yyyy representation.
+ * If the input cannot be parsed as a Date, the original string is returned.
+ */
 const formatPolishDate = (rawDate: string) => {
   const date = new Date(rawDate);
   if (Number.isNaN(date.getTime())) return rawDate;
@@ -40,6 +44,10 @@ const formatPolishDate = (rawDate: string) => {
 
 const QUERY_PARAM_KEY = 'appointmentId';
 
+/**
+ * Read the appointment id from current window location query params.
+ * Returns null if not available or running in a non-browser environment.
+ */
 const getAppointmentIdFromLocation = () => {
   if (typeof window === 'undefined') return null;
   const params = new URLSearchParams(window.location.search);
@@ -47,6 +55,10 @@ const getAppointmentIdFromLocation = () => {
   return id && id.trim().length > 0 ? id : null;
 };
 
+/**
+ * Update the browser URL to include or remove the appointmentId query parameter
+ * without causing a navigation (uses history.pushState).
+ */
 const updateUrlWithAppointmentId = (id: string | null) => {
   if (typeof window === 'undefined') return;
   const url = new URL(window.location.href);
@@ -92,8 +104,10 @@ const ACTION_GROUPS = [
   },
 ];
 
-// Env vars will be read inside the component to allow hot-reload updates in Studio
-
+/**
+ * Main content for the Appointments tool. Handles data loading, filtering,
+ * selection and rendering of list or detail views.
+ */
 const AppointmentsToolContent: React.FC = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -102,6 +116,7 @@ const AppointmentsToolContent: React.FC = () => {
   const [toolInitialized, setToolInitialized] = useState(false);
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(() => getAppointmentIdFromLocation());
 
+  // Keep selectedAppointmentId in sync with browser history (back/forward).
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const handlePopState = () => {
@@ -112,11 +127,14 @@ const AppointmentsToolContent: React.FC = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  // When the tool is initialized, ensure the selected appointment ID reflects
+  // any value present in the current URL (e.g. when opening a direct link).
   useEffect(() => {
     if (!toolInitialized) return;
     setSelectedAppointmentId(getAppointmentIdFromLocation());
   }, [toolInitialized]);
 
+  // Compute class names for status filter buttons based on active state.
   const statusButtonClass = (active: boolean) =>
     [
       'btn btn-sm rounded-full border transition-all duration-200 focus-visible:outline-none focus-visible:ring focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-base-100',
@@ -125,26 +143,32 @@ const AppointmentsToolContent: React.FC = () => {
         : 'btn-ghost border-base-300 bg-base-100/80 text-base-content/70 hover:text-base-content hover:border-primary/40 hover:bg-base-100',
     ].join(' ');
 
+  // Derived list based on selected status filter.
   const filteredAppointments = useMemo(() => {
     if (statusFilter === 'all') return appointments;
     return appointments.filter((a) => a.service.status === statusFilter);
   }, [appointments, statusFilter]);
 
+  // The currently selected appointment object (if any) derived from id.
   const selectedAppointment = useMemo(() => {
     if (!selectedAppointmentId) return null;
     return appointments.find((appointment) => appointment.id === selectedAppointmentId) || null;
   }, [appointments, selectedAppointmentId]);
 
+  // Select an appointment and reflect it in the URL.
   const handleSelectAppointment = useCallback((appointmentId: string) => {
     updateUrlWithAppointmentId(appointmentId);
     setSelectedAppointmentId(appointmentId);
   }, []);
 
+  // Close the detail view and clear the appointment id from the URL.
   const handleCloseDetail = useCallback(() => {
     updateUrlWithAppointmentId(null);
     setSelectedAppointmentId(null);
   }, []);
 
+  // Map appointment status values to display label, icon and css classes.
+  // Note: labels here are localized (Polish) to match the UI language.
   const resolveStatusTone = useCallback((status: string) => {
     const toneMap: Record<string, { label: string; icon: React.ReactNode; classes: string }> = {
       confirmed: { label: 'Potwierdzone', icon: <CheckCircle2 className="w-4 h-4" />, classes: 'badge-success' },
@@ -156,10 +180,6 @@ const AppointmentsToolContent: React.FC = () => {
   }, []);
 
   const isDetailOpen = Boolean(selectedAppointmentId);
-
-  // ...usunięto lokalną logikę listContent...
-
-  // ...usunięto lokalną logikę detailPanel...
   const detailPanel = (
     <Detail
       appointment={selectedAppointment}
@@ -171,15 +191,17 @@ const AppointmentsToolContent: React.FC = () => {
     />
   );
 
-  // Initialize tool only after component is mounted
+  // Mark the tool as initialized once the component mounts. This separates
+  // initialization from the first render so effects that depend on the
+  // initialization flag can run predictably.
   useEffect(() => {
     console.log('[AppointmentsTool] Component mounted, initializing...');
     setToolInitialized(true);
   }, []);
 
-  // Pobierz dane z Cloud Function (z cache)
+  // Fetch appointments from the Cloud Function. By default this uses the
+  // cache provided by the cloud function (see fetchAppointments useCache param).
   useEffect(() => {
-    // Don't fetch data until tool is properly initialized
     if (!toolInitialized) {
       console.log('[AppointmentsTool] Tool not yet initialized, skipping data fetch');
       return;
@@ -190,7 +212,7 @@ const AppointmentsToolContent: React.FC = () => {
         setLoading(true);
         setError(null);
         
-        // Wywołaj Cloud Function z cache enabled (domyślnie)
+        // Call the Cloud Function with cache enabled by default.
         const response = await fetchAppointments(
           statusFilter !== 'all' ? { status: statusFilter } : undefined,
           true // useCache = true
@@ -204,7 +226,7 @@ const AppointmentsToolContent: React.FC = () => {
 
         setAppointments(response.data.appointments);
       } catch (err) {
-        console.error('Błąd pobierania terminów:', err);
+        console.error('Error fetching appointments:', err);
         setError(err instanceof Error ? err.message : 'Wystąpił nieznany błąd');
         setAppointments([]);
       } finally {
@@ -214,7 +236,9 @@ const AppointmentsToolContent: React.FC = () => {
     fetchData();
   }, [statusFilter, toolInitialized]);
 
-  // Ręczne odświeżenie danych (pomija cache)
+  // Manual refresh handler. This bypasses the cache in fetchAppointments
+  // to force a fresh fetch from the API. A small delay is applied for UX so
+  // the loading skeleton has time to appear.
   const reload = () => {
     setLoading(true);
     setTimeout(async () => {
@@ -222,7 +246,7 @@ const AppointmentsToolContent: React.FC = () => {
         setError(null);
         const response = await fetchAppointments(
           statusFilter !== 'all' ? { status: statusFilter } : undefined,
-          false // useCache = false - wymuś pobieranie z API przy manualnym odświeżeniu
+          false // useCache = false - force fetch from API on manual refresh
         );
 
         if (!response.success) {
@@ -238,24 +262,25 @@ const AppointmentsToolContent: React.FC = () => {
       } finally {
         setLoading(false);
       }
-    }, 350); // slight delay for UX / skeleton
+    }, 200); // slight delay for UX / skeleton
   };
 
+  // List view layout (main listing of appointments).
   const listView = (
     <div className="fade-in space-y-6">
       <div className="flex flex-col gap-5">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-2xl font-semibold flex items-center gap-2 text-base-content">
-            <CalendarDays className="w-7 h-7 -translate-y-[2px]" /> Rezerwacje
-          </h2>
+          <div>
+            <h1 className="text-3xl font-bold text-base-content">Rezerwacje</h1>
+          </div>
           <button
             type="button"
             onClick={reload}
-            className="btn btn-sm gap-2 rounded-full border border-base-300 bg-base-100/90 text-base-content/80 hover:text-base-content hover:border-primary/40 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-base-100"
+            className="btn btn-ghost gap-2 border border-base-300 bg-base-100/90 text-base-content/80 hover:text-base-content hover:border-primary/40 hover:bg-base-100"
             title="Pobierz najnowsze dane"
           >
-            <RefreshCcw className="w-4 h-4" />
-            <span>Odśwież</span>
+            <RefreshCcw className="w-5 h-5" />
+            Odśwież
           </button>
         </div>
         <div className="flex flex-col gap-2">
@@ -281,6 +306,7 @@ const AppointmentsToolContent: React.FC = () => {
     </div>
   );
 
+  // Detail view layout (shows when an appointment is selected).
   const detailView = (
     <div className="fade-in space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -292,23 +318,23 @@ const AppointmentsToolContent: React.FC = () => {
           >
             <ArrowLeft className="w-6 h-6" />
           </button>
-          <h2 className="text-xl sm:text-2xl font-semibold text-base-content">Szczegóły wizyty</h2>
+          <h1 className="text-xl sm:text-3xl font-bold text-base-content">Szczegóły wizyty</h1>
         </div>
         <button
           type="button"
           onClick={reload}
-          className="btn btn-sm gap-2 rounded-full border border-base-300 bg-base-100/90 text-base-content/80 hover:text-base-content hover:border-primary/40 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-base-100"
+          className="btn btn-ghost gap-2 border border-base-300 bg-base-100/90 text-base-content/80 hover:text-base-content hover:border-primary/40 hover:bg-base-100"
           title="Pobierz najnowsze dane"
         >
-          <RefreshCcw className="w-4 h-4" />
-          <span>Odśwież</span>
+          <RefreshCcw className="w-5 h-5" />
+          Odśwież
         </button>
       </div>
       {detailPanel}
     </div>
   );
 
-  // Don't render anything until tool is properly initialized
+  // Don't render the tool UI until initialization is complete.
   if (!toolInitialized) {
     return (
       <div className="p-6 bg-base-100 min-h-screen">
@@ -324,12 +350,14 @@ const AppointmentsToolContent: React.FC = () => {
     );
   }
 
+  // Show loading skeleton while fetching data.
   if (loading) {
-    return <LoadingSkeleton />;
+    return <LoadingSkeleton variant="grid" itemCount={8} />;
   }
 
+  // Show an error panel if loading failed.
   if (error) {
-    return <ErrorPanel error={error} onReload={reload} />;
+    return <ErrorPanel error={error} onReload={reload} title="Błąd ładowania terminów" />;
   }
 
   return (

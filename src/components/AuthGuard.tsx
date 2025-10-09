@@ -4,6 +4,12 @@ import { LogIn, User, LogOut, AlertCircle } from 'lucide-react';
 import { FaGoogle, FaGithub } from "react-icons/fa";
 import { AppwriteAuth, type AuthUser } from '../lib/appwrite';
 
+/**
+ * AuthGuard wraps a tool and enforces authentication using AppwriteAuth.
+ * It handles initialization, OAuth redirect cleanup, and exposes
+ * simple login/logout controls. When `requireAuth` is false the
+ * children are rendered after auth initialization completes.
+ */
 interface AuthGuardProps {
   children: ReactNode;
   toolName: string;

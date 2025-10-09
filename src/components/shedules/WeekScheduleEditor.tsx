@@ -8,6 +8,10 @@ export type WeekScheduleEditorProps = {
   onScheduleChange: (schedule: Omit<SchedulePreset, '$id' | 'createdAt' | 'updatedAt'>) => void;
 };
 
+/**
+ * WeekScheduleEditor provides a compact UI to toggle available time slots per weekday.
+ * Designed mobile-first with a horizontal day selector and time grid.
+ */
 const WeekScheduleEditor: React.FC<WeekScheduleEditorProps> = ({ schedule, onScheduleChange }) => {
   // Mobile-first: edit one day at a time with a horizontal day selector
   const [activeDay, setActiveDay] = useState<WeekDay>('monday');

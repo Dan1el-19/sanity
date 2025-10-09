@@ -8,6 +8,11 @@ export type MonthAssignmentPanelProps = {
   onClose: () => void;
 };
 
+/**
+ * MonthAssignmentPanel is a modal-style panel that lets the user select which
+ * months a schedule preset should be active for. It groups months by year
+ * for easier navigation.
+ */
 const MonthAssignmentPanel: React.FC<MonthAssignmentPanelProps> = ({ assignedMonths, onAssign, onClose }) => {
   const [selectedMonths, setSelectedMonths] = useState<string[]>(assignedMonths);
   const availableMonths = generateMonthsList();

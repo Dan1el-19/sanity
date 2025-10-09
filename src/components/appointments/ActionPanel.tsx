@@ -1,5 +1,9 @@
 import React from 'react';
 
+/**
+ * ActionPanel displays grouped action buttons used in the appointment detail view.
+ * Groups and button labels come from the parent so this remains a stateless renderer.
+ */
 export type ActionPanelProps = {
   actionGroups: ReadonlyArray<{
     key: string;

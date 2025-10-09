@@ -2,6 +2,10 @@ import React from 'react';
 import { UsersRound, CalendarDays, ShoppingBag, CircleDollarSign, Mail } from 'lucide-react';
 import { Appointment } from '../../lib/services/appointmentsCloudFunction';
 
+/**
+ * Appointment list component. Renders card grid of appointments with
+ * accessible keyboard handlers and selection support.
+ */
 export type ListProps = {
   appointments: Appointment[];
   statusFilter: string;

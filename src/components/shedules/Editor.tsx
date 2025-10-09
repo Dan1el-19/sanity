@@ -15,6 +15,10 @@ export type EditorProps = {
   onSave: () => void;
 };
 
+/**
+ * Schedule Editor. Handles creating and updating schedule presets.
+ * Validates preset name and coordinates saving via the schedules service.
+ */
 const Editor: React.FC<EditorProps> = ({ preset, onBack, onSave }) => {
   const [schedule, setSchedule] = useState<Omit<SchedulePreset, '$id' | 'createdAt' | 'updatedAt'>>({
     name: preset?.name || '',

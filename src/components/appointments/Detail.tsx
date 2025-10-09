@@ -10,6 +10,12 @@ import {
 import { Appointment } from '../../lib/services/appointmentsCloudFunction';
 import ActionPanel from './ActionPanel';
 
+/**
+ * Detail view for a single appointment.
+ * Shows appointment metadata, notes and available action groups.
+ * This component expects already-formatted helpers (date formatter, status resolver)
+ * to be passed in via props so it remains a presentational component.
+ */
 export type DetailProps = {
   appointment: Appointment | null;
   isDetailOpen: boolean;
